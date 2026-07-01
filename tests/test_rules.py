@@ -1,13 +1,15 @@
 """Tests for the skillsaw-typos plugin."""
 
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 from skillsaw.context import RepositoryContext
 from skillsaw.rules.builtin.utils import invalidate_read_caches
 
 from skillsaw_typos import SKILLSAW_RULES
-from skillsaw_typos.rules import TypoRule
+from skillsaw_typos.rules import IGNORE_FILE, TypoRule
 
 FIXTURE = Path(__file__).parent / "fixture"
 
@@ -51,10 +53,29 @@ def test_clean_content_no_violations(tmp_path):
     assert TypoRule().check(context) == []
 
 
-def test_ignore_words(tmp_path):
+def test_ignore_words_config(tmp_path):
     context = RepositoryContext(make_repo(tmp_path))
     rule = TypoRule({"ignore-words": ["seperate", "recieve", "occured"]})
     assert rule.check(context) == []
+
+
+def test_ignore_file(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / IGNORE_FILE).write_text("seperate\nrecieve\noccured\n", encoding="utf-8")
+    context = RepositoryContext(repo)
+    assert TypoRule().check(context) == []
+
+
+def test_ignore_file_partial(tmp_path):
+    repo = make_repo(tmp_path)
+    (repo / IGNORE_FILE).write_text("# comments are skipped\nseperate\n", encoding="utf-8")
+    context = RepositoryContext(repo)
+    violations = TypoRule().check(context)
+    words = [v.message.split("'")[1] for v in violations]
+    assert "seperate" not in words
+    assert "recieve" in words
+    assert "occured" in words
+    assert len(violations) == 2
 
 
 def test_extra_dictionaries(tmp_path):
@@ -130,3 +151,44 @@ def test_autofix_preserves_case(tmp_path):
     violations = rule.check(context)
     fixes = rule.fix(context, violations)
     assert "Receive" in fixes[0].fixed_content
+
+
+def test_accept_command(tmp_path):
+    repo = make_repo(tmp_path)
+    result = subprocess.run(
+        [sys.executable, "-m", "skillsaw_typos.cli", "accept", str(repo)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "3" in result.stdout
+
+    ignore_path = repo / IGNORE_FILE
+    assert ignore_path.exists()
+    words = {
+        w.strip()
+        for w in ignore_path.read_text(encoding="utf-8").splitlines()
+        if w.strip() and not w.startswith("#")
+    }
+    assert words == {"seperate", "recieve", "occured"}
+
+    # After accept, no violations
+    invalidate_read_caches()
+    context = RepositoryContext(repo)
+    assert TypoRule().check(context) == []
+
+
+def test_accept_idempotent(tmp_path):
+    repo = make_repo(tmp_path)
+    subprocess.run(
+        [sys.executable, "-m", "skillsaw_typos.cli", "accept", str(repo)],
+        capture_output=True,
+        text=True,
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "skillsaw_typos.cli", "accept", str(repo)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "nothing to accept" in result.stdout

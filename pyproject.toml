@@ -9,13 +9,57 @@ description = "Skillsaw plugin that flags misspellings in agentic instruction pr
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
+authors = [
+    {name = "Stephen Benjamin", email = "stephen@bitbin.de"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Quality Assurance",
+]
+keywords = ["skillsaw", "linter", "typos", "spellcheck", "codespell"]
 dependencies = [
     "skillsaw>=0.14",
     "codespell",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=26,<27",
+    "flake8>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/stbenjam/skillsaw-typos"
+Repository = "https://github.com/stbenjam/skillsaw-typos"
+Issues = "https://github.com/stbenjam/skillsaw-typos/issues"
+
 [project.entry-points."skillsaw.plugins"]
 typos = "skillsaw_typos"
 
+[project.scripts]
+skillsaw-typos = "skillsaw_typos.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
+include = '\.pyi?$'

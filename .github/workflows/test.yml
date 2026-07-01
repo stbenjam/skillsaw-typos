@@ -1,0 +1,96 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-cov
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --cov=src/skillsaw_typos --cov-report=xml --cov-report=term
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "black>=26,<27" flake8
+
+      - name: Check formatting with black
+        run: black --check src/ tests/
+
+      - name: Lint with flake8
+        run: |
+          flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=100 --statistics
+
+  self-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install skillsaw and plugin
+        run: |
+          python -m pip install --upgrade pip
+          pip install skillsaw -e .
+
+      - name: Verify plugin loads
+        run: |
+          skillsaw plugins | grep -q "typos"
+
+      - name: Lint fixture
+        run: |
+          skillsaw lint tests/fixture --format json | python3 -c "
+          import sys, json
+          r = json.load(sys.stdin)
+          typo_violations = [v for v in r['violations'] if v['rule_id'] == 'typo']
+          assert len(typo_violations) == 3, f'expected 3 typo violations, got {len(typo_violations)}'
+          assert all(v['source'] == 'plugin:typos' for v in typo_violations)
+          print(f'Plugin OK: {len(typo_violations)} typo violations from plugin:typos')
+          "

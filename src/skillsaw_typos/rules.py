@@ -18,6 +18,8 @@ from skillsaw.blocks import ContentBlock
 
 _WORD_RE = re.compile(r"[a-zA-Z]+(?:'[a-zA-Z]+)*")
 
+IGNORE_FILE = ".skillsaw-typos-ignore"
+
 
 @lru_cache(maxsize=1)
 def _load_codespell_dict() -> Dict[str, List[str]]:
@@ -37,6 +39,18 @@ def _load_codespell_dict() -> Dict[str, List[str]]:
         if parts:
             typos[word] = parts
     return typos
+
+
+def _load_ignore_file(repo_root: Path) -> set:
+    """Load words from the repo's ignore file."""
+    path = repo_root / IGNORE_FILE
+    if not path.is_file():
+        return set()
+    return {
+        w.strip().lower()
+        for w in path.read_text(encoding="utf-8").splitlines()
+        if w.strip() and not w.strip().startswith("#")
+    }
 
 
 def _extract_misspelling(message: str) -> Optional[str]:
@@ -76,7 +90,7 @@ class TypoRule(Rule):
     def default_severity(self) -> Severity:
         return Severity.WARNING
 
-    def _build_dict(self) -> Dict[str, List[str]]:
+    def _build_dict(self, repo_root: Path) -> Dict[str, List[str]]:
         typos = dict(_load_codespell_dict())
 
         for path_str in self.config.get("extra-dictionaries", []):
@@ -93,6 +107,7 @@ class TypoRule(Rule):
                     typos[word.strip().lower()] = parts
 
         ignore = {w.lower() for w in self.config.get("ignore-words", [])}
+        ignore |= _load_ignore_file(repo_root)
         for w in ignore:
             typos.pop(w, None)
 
@@ -100,7 +115,7 @@ class TypoRule(Rule):
 
     def check(self, context: RepositoryContext) -> List[RuleViolation]:
         violations: List[RuleViolation] = []
-        typos = self._build_dict()
+        typos = self._build_dict(context.root_path)
 
         for block in context.lint_tree.find(ContentBlock):
             content = block.read_body(strip_code_blocks=True)
@@ -122,8 +137,10 @@ class TypoRule(Rule):
                         )
         return violations
 
-    def fix(self, context: RepositoryContext, violations: List[RuleViolation]) -> List[AutofixResult]:
-        typos = self._build_dict()
+    def fix(
+        self, context: RepositoryContext, violations: List[RuleViolation]
+    ) -> List[AutofixResult]:
+        typos = self._build_dict(context.root_path)
         by_file: Dict[Path, List[RuleViolation]] = {}
         for v in violations:
             by_file.setdefault(v.file_path, []).append(v)
