@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skillsaw-typos"
+version = "0.1.0"
+description = "Skillsaw plugin that flags misspellings in agentic instruction prose"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+dependencies = [
+    "skillsaw>=0.14",
+    "codespell",
+]
+
+[project.entry-points."skillsaw.plugins"]
+typos = "skillsaw_typos"
+
+[tool.setuptools.packages.find]
+where = ["src"]
